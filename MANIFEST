@@ -1,0 +1,8 @@
+Changes
+MANIFEST
+README
+META.yml
+Makefile.PL
+lib/Date/MonthSet.pm
+t/1pod.t
+t/2monthset.t
