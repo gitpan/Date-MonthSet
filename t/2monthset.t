@@ -1,4 +1,4 @@
-use Test::More tests => 239;
+use Test::More tests => 268;
 
 use strict;
 
@@ -19,9 +19,10 @@ isa_ok($set, 'Date::MonthSet');
 eval { my @a = @$set };
 is($@, '', 'Date::MonthSet is a blessed array reference');
 
-cmp_ok(scalar(@$set), '==', 13, 'state has 13 objects');
+cmp_ok(scalar(@$set), '==', 14, 'array reference has 14 objects');
 cmp_ok(scalar grep({ $_ == 0 } @$set[0..11]), '==', 12, 'pristine Date::MonthSet');
-cmp_ok($set->[-1], 'eq', '-', 'default placeholder');
+cmp_ok($set->[-2], 'eq', '%M', 'default conjunction format');
+cmp_ok($set->[-1], 'eq', '-', 'default complement format');
 
 # test marking
 
@@ -105,11 +106,18 @@ cmp_ok($set->contains(2, 6, 8), '==', 1, 'contains: true multi numerical');
 cmp_ok($set->contains(qw(1 March august November)), '==', 0, 'contains: false mixed');
 cmp_ok($set->contains(qw(February jun 6 august 2)), '==', 1, 'contains: true mixed');
 
-# test stringification
+# test formats and stringification
 
-is("$set", '-F---J-A----', 'stringification with default placeholder');
-$set->placeholder('');
-is("$set", 'FJA', 'stringification with empty placeholder');
+is("$set", '-F---J-A----', 'default stringification');
+
+$set->format('<strong>%M</strong>', undef);
+is("$set", '-<strong>F</strong>---<strong>J</strong>-<strong>A</strong>----', 'stringification with format_conjunction of <strong>%M</strong>');
+
+$set->format(undef, '%M');
+is("$set", 'J<strong>F</strong>MAM<strong>J</strong>J<strong>A</strong>SOND', 'stringification with format_complement of %M');
+
+$set->format('[%M]', '');
+is("$set", '[F][J][A]', 'stringification with format_complement of [%M] and empty format_conjunction');
 
 # test numerification
 
@@ -140,6 +148,14 @@ listcmp($set, [0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1]);
 eval { $set = new Date::MonthSet placeholder => '**', string => '****M**********S******' };
 is($@, '', 'new Date::MonthSet placeholder => \'**\', string => \'****M**********S******\'');
 listcmp($set, [0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0]);
+
+eval { $set = new Date::MonthSet format_conjunction => '{%M}', string => '{J}{F}--{M}------{D}' };
+is($@, '', 'new Date::MonthSet format_conjunction => \'{%M}\'');
+listcmp($set, [1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]);
+
+eval { $set = new Date::MonthSet format_conjunction => '%M%M', format_complement => '.', string => '..MM.MM....OONNDD' };
+is($@, '', 'new Date::MonthSet format_conjunction => \'{%M}\'');
+listcmp($set, [0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1]);
 
 eval { $set = new Date::MonthSet set => [ 1 .. 4, 9 ] };
 is($@, '', 'new Date::MonthSet set => [ 1 .. 4, 9 ]');

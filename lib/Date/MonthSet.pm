@@ -114,7 +114,7 @@ Date::MonthSet - simple interface to a collection of months
 
 =cut
 
-our $VERSION = 0.1;
+our $VERSION = 0.2;
 
 use POSIX qw(isdigit isprint);
 
@@ -125,6 +125,21 @@ use overload '!='	=> sub { not equal @_ };
 use overload '<=>'	=> \&compare;
 use overload '+'	=> \&addition;
 use overload '-'	=> \&subtraction;
+
+use constant COMPLEMENT		=> -1;
+use constant CONJUNCTION	=> -2;
+use constant JANUARY		=> 0;
+use constant FEBRUARY		=> 1;
+use constant MARCH			=> 2;
+use constant APRIL			=> 3;
+use constant MAY			=> 4;
+use constant JUNE			=> 5;
+use constant JULY			=> 6;
+use constant AUGUST			=> 7;
+use constant SEPTEMBER		=> 8;
+use constant OCTOBER		=> 9;
+use constant NOVEMEBER		=> 10;
+use constant DECEMBER		=> 11;
 
 my @months = qw(January February March April May June July
 				August September October November December);
@@ -218,11 +233,17 @@ sub new
 	my $proto = shift;
 	my $class = ref($proto) || $proto;
 
-	my $aref = [ ((0) x 12), '-' ];
+	my $aref = [ ((0) x 12), '%M', '-' ];
 
 	my %opts = @_;
 
-	$aref->[-1] = $opts{placeholder} || '' if exists $opts{placeholder};
+	warn 'placeholder option is deprecated' if exists $opts{placeholder};
+
+	my $fmt_complement	= $opts{format_complement} || $opts{placeholder} || '-';
+	my $fmt_conjunction	= $opts{format_conjunction} || '%M';
+
+	$aref->[COMPLEMENT]		= $fmt_complement;
+	$aref->[CONJUNCTION]	= $fmt_conjunction;
 
 	if (my $val = $opts{integer}) {
 		die	'integer attribute specified to constructor, ' .
@@ -240,9 +261,24 @@ sub new
 		if ($val =~ /^[01]{12}$/) {
 			@a = split //, $val;
 		} else {
-			my $ph = $aref->[-1];
-			my $re = join '', map "($_|\Q$ph\E)", split //, 'JFMAMJJASOND';
-			@a = map { $_ eq $ph ? 0 : 1 } ($val =~ /^$re$/i);
+			my @conjunctions	= ();
+			my @complements		= ();
+			my $re				= '';
+
+			foreach my $m (split //, 'JFMAMJJASOND') {
+				my $re_conj = $aref->[CONJUNCTION];
+				my $re_comp = $aref->[COMPLEMENT];
+
+				$re_conj =~ s/%M/$m/g;
+				$re_comp =~ s/%M/$m/g;
+
+				push @conjunctions,	$re_conj;
+				push @complements,	$re_comp;
+
+				$re .= "(\Q$re_conj\E|\Q$re_comp\E)";
+			}
+
+			@a = map { $_ eq shift @complements ? 0 : 1 } ($val =~ /^$re$/i);
 		}
 
 		die 'unable to parse string attribute' if not scalar @a == 12;
@@ -267,6 +303,17 @@ sub new
 				my $month = lc $months[$i];
 				$aref->[$i] = 1 if $term eq $month || $term eq substr $month, 0, 3;
 			}
+		}
+	}
+
+	if (my $val = $opts{list}) {
+		die 'list attribute specified to constructor, but no list was ' .
+			'specified' if not ref($val) eq 'ARRAY';
+		die 'a list must have exactly twelve values!'
+			if 12 != scalar @$val;
+
+		for (my $i = 0; $i < 11; $i++) {
+			$aref->[$i] = $val->[$i] ? 1 : 0;
 		}
 	}
 
@@ -364,9 +411,32 @@ sub placeholder
 {
 	my $self = shift;
 
-	$self->[-1] = shift if scalar @_;
+	warn 'Date::MonthSet->placeholder is deprecated';
 
-	return $self->[-1];
+	return ($self->format(undef, @_))[1];
+}
+
+=head2 format
+
+gets/sets the format used in stringification.  when setting
+the format, the first argument defines the format to be used
+when the month is contained within the set while the second
+argument defines the format to be used when the month is not
+contained within the set.  if undef is specified for either
+of them, the current setting is unchanged.
+
+=cut
+
+sub format
+{
+	my $self			= shift;
+	my $fmt_conjunction	= shift;
+	my $fmt_complement	= shift;
+
+	$self->[CONJUNCTION]	= $fmt_conjunction	if defined $fmt_conjunction;
+	$self->[COMPLEMENT]		= $fmt_complement	if defined $fmt_complement;
+
+	return @$self[CONJUNCTION,COMPLEMENT];
 }
 
 =head2 stringify
@@ -375,10 +445,13 @@ sub placeholder
 
 sub stringify
 {
-	my $self	= shift;
-	my $i		= 0;
+	my $self = shift;
 
-	return join '', map { $self->[$i++] ? substr($months[$i-1], 0, 1) : $self->[-1] } @$self[0..11];
+	return join '', map {
+		my $s = $self->[$_] ? $self->[CONJUNCTION] : $self->[COMPLEMENT];
+		$s =~ s/%M/substr($months[$_], 0, 1)/eg;
+		$s;
+	} JANUARY .. DECEMBER;
 }
 
 =head2 numerify
